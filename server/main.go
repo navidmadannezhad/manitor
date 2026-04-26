@@ -89,7 +89,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:    listenAddr,
-		Handler: mux,
+		Handler: withCORS(mux),
 	}
 
 	go func() {
@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS connections (
 );
 CREATE INDEX IF NOT EXISTS idx_connections_ip ON connections(ip);
 CREATE INDEX IF NOT EXISTS idx_connections_created_at ON connections(created_at);
+CREATE INDEX IF NOT EXISTS idx_connections_ip_id ON connections(ip, id);
 `)
 	return err
 }
@@ -294,15 +295,39 @@ func buildConnectionListQuery(r *http.Request) (string, int) {
 	} else {
 		orderBy = append(orderBy, "id DESC")
 	}
+	for i := range orderBy {
+		orderBy[i] = prefixOrderExprLatestPerIP(orderBy[i])
+	}
 
 	limit := parseLimit(q.Get("limit"), 500)
+	// One row per IP: latest row (max id) per ip. Cumulative totals live on that row.
 	query := `
-SELECT id, ip, wifiname, download_size, upload_size, total_download, total_upload, created_at
-FROM connections
+SELECT c.id, c.ip, c.wifiname, c.download_size, c.upload_size, c.total_download, c.total_upload, c.created_at
+FROM connections c
+INNER JOIN (
+	SELECT ip, MAX(id) AS max_id
+	FROM connections
+	GROUP BY ip
+) latest ON c.ip = latest.ip AND c.id = latest.max_id
 ORDER BY ` + strings.Join(orderBy, ", ") + `
 LIMIT ?
 `
 	return query, limit
+}
+
+// prefixOrderExprLatestPerIP maps list sort tokens to the aliased subquery in handleListConnections.
+func prefixOrderExprLatestPerIP(expr string) string {
+	expr = strings.TrimSpace(expr)
+	for _, col := range []string{"total_download", "total_upload", "id", "created_at", "ip", "wifiname", "download_size", "upload_size"} {
+		prefix := col + " "
+		if len(expr) > len(prefix) && strings.EqualFold(expr[:len(prefix)], prefix) {
+			rest := strings.TrimSpace(expr[len(prefix):])
+			if rest == "ASC" || rest == "DESC" {
+				return "c." + col + " " + rest
+			}
+		}
+	}
+	return "c." + expr
 }
 
 func normalizeSortBy(value string) string {
@@ -507,6 +532,21 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("encode response failed: %v", err)
 	}
+}
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func waitForShutdown(httpServer *http.Server) {
