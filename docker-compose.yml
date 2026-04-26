@@ -3,7 +3,7 @@ services:
   server:
     build: ./server
     ports:
-      - "5000:9293"
+      - "9292:9293"
     volumes:
       - server_data:/data
     environment:
@@ -16,7 +16,7 @@ services:
       args:
         VITE_SERVER_BASE_URL: ${VITE_SERVER_BASE_URL:-http://localhost:9293}
     ports:
-      - "3000:80"
+      - "9293:80"
     depends_on:
       - server
     restart: unless-stopped
