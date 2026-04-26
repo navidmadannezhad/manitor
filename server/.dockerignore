@@ -1,0 +1,7 @@
+manitor.db
+.env
+*.exe
+dist/
+.git
+.gitignore
+README.md

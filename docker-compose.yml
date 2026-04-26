@@ -1,0 +1,25 @@
+# Full stack: API + static dashboard. From your machine, the UI calls the API at localhost:5000.
+services:
+  server:
+    build: ./server
+    ports:
+      - "5000:5000"
+    volumes:
+      - server_data:/data
+    environment:
+      SERVER_CLIENT: ":5000"
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        VITE_SERVER_BASE_URL: ${VITE_SERVER_BASE_URL:-http://localhost:5000}
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  server_data:
