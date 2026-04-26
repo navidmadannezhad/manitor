@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM hub.hamdocker.ir/golang:1.23-bookworm AS build
 WORKDIR /src
-RUN go env -w GOPROXY=https://mirrors.pardisco.co/go
-RUN go env -w GOSUMDB=off
+RUN go env -w GOPROXY=https://mirror.kargadan.ir/nexus/repository/go-group/,direct
+RUN go env -w GOSUMDB=*
 RUN go env | grep GOPROXY
 
 COPY go.mod go.sum ./
