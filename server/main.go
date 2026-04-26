@@ -41,6 +41,7 @@ type TrafficLog struct {
 
 type AgentPayload struct {
 	SystemIP  string       `json:"system_ip"`
+	HostName  string       `json:"host_name,omitempty"`
 	WiFiName  string       `json:"wifi_name,omitempty"`
 	Collected time.Time    `json:"collected_at"`
 	Logs      []TrafficLog `json:"logs"`
@@ -50,6 +51,7 @@ type Connection struct {
 	ID            int64     `json:"id"`
 	IP            string    `json:"ip"`
 	WiFiName      string    `json:"wifi_name"`
+	HostName      string    `json:"host_name"`
 	DownloadSize  uint64    `json:"download_size"`
 	UploadSize    uint64    `json:"upload_size"`
 	TotalDownload uint64    `json:"total_download"`
@@ -77,6 +79,9 @@ func main() {
 	if err := ensureSchema(db); err != nil {
 		log.Fatalf("ensure schema: %v", err)
 	}
+	if err := ensureHostnameColumn(db); err != nil {
+		log.Fatalf("migrate schema: %v", err)
+	}
 
 	s := &Server{db: db}
 	go s.runMidnightReset()
@@ -84,8 +89,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIngest)
 	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/api/v1/connections/stream", s.handleSessionStreamSocket)
 	mux.HandleFunc("/api/v1/connections", s.handleConnections)
-	mux.HandleFunc("/api/v1/connections/", s.handleConnectionByIPSocket)
 
 	httpServer := &http.Server{
 		Addr:    listenAddr,
@@ -119,6 +124,7 @@ CREATE TABLE IF NOT EXISTS connections (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	ip TEXT NOT NULL,
 	wifiname TEXT NOT NULL,
+	hostname TEXT NOT NULL DEFAULT '',
 	download_size INTEGER NOT NULL,
 	upload_size INTEGER NOT NULL,
 	total_download INTEGER NOT NULL,
@@ -128,7 +134,20 @@ CREATE TABLE IF NOT EXISTS connections (
 CREATE INDEX IF NOT EXISTS idx_connections_ip ON connections(ip);
 CREATE INDEX IF NOT EXISTS idx_connections_created_at ON connections(created_at);
 CREATE INDEX IF NOT EXISTS idx_connections_ip_id ON connections(ip, id);
+CREATE INDEX IF NOT EXISTS idx_connections_host_wifi_id ON connections(hostname, wifiname, id);
 `)
+	return err
+}
+
+func ensureHostnameColumn(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('connections') WHERE name = 'hostname'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE connections ADD COLUMN hostname TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 
@@ -151,7 +170,8 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 
 	upload, download := summarizeSizes(payload.Logs)
 	wifiName := normalizeWiFiName(payload.WiFiName)
-	conn, err := s.insertConnection(payload.SystemIP, wifiName, upload, download)
+	hostName := normalizeHostName(payload.HostName)
+	conn, err := s.insertConnection(payload.SystemIP, wifiName, hostName, upload, download)
 	if err != nil {
 		log.Printf("insert failed: %v", err)
 		http.Error(w, "failed to persist payload", http.StatusInternalServerError)
@@ -192,7 +212,15 @@ func normalizeWiFiName(name string) string {
 	return v
 }
 
-func (s *Server) insertConnection(ip, wifiname string, uploadSize, downloadSize uint64) (Connection, error) {
+func normalizeHostName(name string) string {
+	v := strings.TrimSpace(name)
+	if v == "" {
+		return "unknown"
+	}
+	return v
+}
+
+func (s *Server) insertConnection(ip, wifiname, hostname string, uploadSize, downloadSize uint64) (Connection, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Connection{}, err
@@ -205,10 +233,10 @@ func (s *Server) insertConnection(ip, wifiname string, uploadSize, downloadSize 
 	err = tx.QueryRow(`
 SELECT total_upload, total_download
 FROM connections
-WHERE ip = ?
+WHERE hostname = ? AND wifiname = ?
 ORDER BY id DESC
 LIMIT 1
-`, ip).Scan(&prevTotalUpload, &prevTotalDownload)
+`, hostname, wifiname).Scan(&prevTotalUpload, &prevTotalDownload)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return Connection{}, err
 	}
@@ -222,9 +250,9 @@ LIMIT 1
 
 	now := time.Now().UTC()
 	res, err := tx.Exec(`
-INSERT INTO connections (ip, wifiname, download_size, upload_size, total_download, total_upload, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-`, ip, wifiname, downloadSize, uploadSize, newTotalDownload, newTotalUpload, now)
+INSERT INTO connections (ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`, ip, wifiname, hostname, downloadSize, uploadSize, newTotalDownload, newTotalUpload, now)
 	if err != nil {
 		return Connection{}, err
 	}
@@ -242,6 +270,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
 		ID:            id,
 		IP:            ip,
 		WiFiName:      wifiname,
+		HostName:      hostname,
 		DownloadSize:  downloadSize,
 		UploadSize:    uploadSize,
 		TotalDownload: newTotalDownload,
@@ -296,29 +325,29 @@ func buildConnectionListQuery(r *http.Request) (string, int) {
 		orderBy = append(orderBy, "id DESC")
 	}
 	for i := range orderBy {
-		orderBy[i] = prefixOrderExprLatestPerIP(orderBy[i])
+		orderBy[i] = prefixOrderExprLatestPerSession(orderBy[i])
 	}
 
 	limit := parseLimit(q.Get("limit"), 500)
-	// One row per IP: latest row (max id) per ip. Cumulative totals live on that row.
+	// One row per (display name, Wi‑Fi): latest row per pair. Cumulative totals live on that row.
 	query := `
-SELECT c.id, c.ip, c.wifiname, c.download_size, c.upload_size, c.total_download, c.total_upload, c.created_at
+SELECT c.id, c.ip, c.wifiname, c.hostname, c.download_size, c.upload_size, c.total_download, c.total_upload, c.created_at
 FROM connections c
 INNER JOIN (
-	SELECT ip, MAX(id) AS max_id
+	SELECT hostname, wifiname, MAX(id) AS max_id
 	FROM connections
-	GROUP BY ip
-) latest ON c.ip = latest.ip AND c.id = latest.max_id
+	GROUP BY hostname, wifiname
+) latest ON c.hostname = latest.hostname AND c.wifiname = latest.wifiname AND c.id = latest.max_id
 ORDER BY ` + strings.Join(orderBy, ", ") + `
 LIMIT ?
 `
 	return query, limit
 }
 
-// prefixOrderExprLatestPerIP maps list sort tokens to the aliased subquery in handleListConnections.
-func prefixOrderExprLatestPerIP(expr string) string {
+// prefixOrderExprLatestPerSession maps list sort tokens to the aliased subquery in handleListConnections.
+func prefixOrderExprLatestPerSession(expr string) string {
 	expr = strings.TrimSpace(expr)
-	for _, col := range []string{"total_download", "total_upload", "id", "created_at", "ip", "wifiname", "download_size", "upload_size"} {
+	for _, col := range []string{"total_download", "total_upload", "id", "created_at", "ip", "wifiname", "hostname", "download_size", "upload_size"} {
 		prefix := col + " "
 		if len(expr) > len(prefix) && strings.EqualFold(expr[:len(prefix)], prefix) {
 			rest := strings.TrimSpace(expr[len(prefix):])
@@ -336,6 +365,10 @@ func normalizeSortBy(value string) string {
 		return "total_download"
 	case "total_upload":
 		return "total_upload"
+	case "hostname":
+		return "hostname"
+	case "wifiname":
+		return "wifiname"
 	default:
 		return ""
 	}
@@ -374,6 +407,7 @@ func scanConnections(rows *sql.Rows) ([]Connection, error) {
 			&c.ID,
 			&c.IP,
 			&c.WiFiName,
+			&c.HostName,
 			&c.DownloadSize,
 			&c.UploadSize,
 			&c.TotalDownload,
@@ -390,17 +424,22 @@ func scanConnections(rows *sql.Rows) ([]Connection, error) {
 	return items, nil
 }
 
-func (s *Server) handleConnectionByIPSocket(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionStreamSocket(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	ip := strings.TrimPrefix(r.URL.Path, "/api/v1/connections/")
-	ip = strings.TrimSpace(ip)
-	if ip == "" || strings.Contains(ip, "/") {
-		http.Error(w, "invalid ip path", http.StatusBadRequest)
+	q := r.URL.Query()
+	if _, ok := q["host_name"]; !ok {
+		http.Error(w, "host_name query parameter is required", http.StatusBadRequest)
 		return
 	}
+	if _, ok := q["wifi_name"]; !ok {
+		http.Error(w, "wifi_name query parameter is required", http.StatusBadRequest)
+		return
+	}
+	host := normalizeHostName(q.Get("host_name"))
+	wifi := normalizeWiFiName(q.Get("wifi_name"))
 
 	ws, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -409,7 +448,7 @@ func (s *Server) handleConnectionByIPSocket(w http.ResponseWriter, r *http.Reque
 	}
 	defer ws.Close()
 
-	history, err := s.listConnectionsByIP(ip, 5000)
+	history, err := s.listConnectionsBySession(host, wifi, 5000)
 	if err != nil {
 		log.Printf("history query failed: %v", err)
 		_ = ws.WriteJSON(map[string]any{"type": "error", "message": "history query failed"})
@@ -421,9 +460,10 @@ func (s *Server) handleConnectionByIPSocket(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := ws.WriteJSON(map[string]any{
-		"type": "history",
-		"ip":   ip,
-		"data": history,
+		"type":      "history",
+		"host_name": host,
+		"wifi_name": wifi,
+		"data":      history,
 	}); err != nil {
 		return
 	}
@@ -431,7 +471,7 @@ func (s *Server) handleConnectionByIPSocket(w http.ResponseWriter, r *http.Reque
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
-		newRows, err := s.listConnectionsByIPAfterID(ip, lastID, 500)
+		newRows, err := s.listConnectionsBySessionAfterID(host, wifi, lastID, 500)
 		if err != nil {
 			_ = ws.WriteJSON(map[string]any{"type": "error", "message": "stream query failed"})
 			return
@@ -441,23 +481,24 @@ func (s *Server) handleConnectionByIPSocket(w http.ResponseWriter, r *http.Reque
 		}
 		lastID = newRows[len(newRows)-1].ID
 		if err := ws.WriteJSON(map[string]any{
-			"type": "update",
-			"ip":   ip,
-			"data": newRows,
+			"type":      "update",
+			"host_name": host,
+			"wifi_name": wifi,
+			"data":      newRows,
 		}); err != nil {
 			return
 		}
 	}
 }
 
-func (s *Server) listConnectionsByIP(ip string, limit int) ([]Connection, error) {
+func (s *Server) listConnectionsBySession(hostname, wifiname string, limit int) ([]Connection, error) {
 	rows, err := s.db.Query(`
-SELECT id, ip, wifiname, download_size, upload_size, total_download, total_upload, created_at
+SELECT id, ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at
 FROM connections
-WHERE ip = ?
+WHERE hostname = ? AND wifiname = ?
 ORDER BY id ASC
 LIMIT ?
-`, ip, limit)
+`, hostname, wifiname, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -465,14 +506,14 @@ LIMIT ?
 	return scanConnections(rows)
 }
 
-func (s *Server) listConnectionsByIPAfterID(ip string, afterID int64, limit int) ([]Connection, error) {
+func (s *Server) listConnectionsBySessionAfterID(hostname, wifiname string, afterID int64, limit int) ([]Connection, error) {
 	rows, err := s.db.Query(`
-SELECT id, ip, wifiname, download_size, upload_size, total_download, total_upload, created_at
+SELECT id, ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at
 FROM connections
-WHERE ip = ? AND id > ?
+WHERE hostname = ? AND wifiname = ? AND id > ?
 ORDER BY id ASC
 LIMIT ?
-`, ip, afterID, limit)
+`, hostname, wifiname, afterID, limit)
 	if err != nil {
 		return nil, err
 	}

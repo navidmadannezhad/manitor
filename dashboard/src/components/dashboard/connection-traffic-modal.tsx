@@ -32,8 +32,8 @@ type ServerRow = {
 }
 
 type WsMessage =
-  | { type: 'history'; ip: string; data: ServerRow[] }
-  | { type: 'update'; ip: string; data: ServerRow[] }
+  | { type: 'history'; host_name?: string; wifi_name?: string; data: ServerRow[] }
+  | { type: 'update'; host_name?: string; wifi_name?: string; data: ServerRow[] }
   | { type: 'error'; message: string }
 
 type ChartPoint = { id: number; t: string; up: number; down: number }
@@ -82,32 +82,51 @@ function rowsToPoints(rows: ServerRow[]): ChartPoint[] {
 type ConnectionTrafficModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  ip: string | null
+  /** Values must match server-normalized session (same as list API). */
+  hostName: string | null
+  wifiName: string | null
   baseUrl: string
 }
 
-export function ConnectionTrafficModal({ open, onOpenChange, ip, baseUrl }: ConnectionTrafficModalProps) {
+export function ConnectionTrafficModal({
+  open,
+  onOpenChange,
+  hostName,
+  wifiName,
+  baseUrl,
+}: ConnectionTrafficModalProps) {
   const [points, setPoints] = useState<ChartPoint[]>([])
   const [error, setError] = useState<string | null>(null)
   const [awaitingFirst, setAwaitingFirst] = useState(true)
+  const [connected, setConnected] = useState(false)
 
   const reset = useCallback(() => {
     setPoints([])
     setError(null)
     setAwaitingFirst(true)
+    setConnected(false)
   }, [])
 
   useEffect(() => {
     if (!open) return
     reset()
-  }, [open, ip, reset])
+  }, [open, hostName, wifiName, reset])
 
   useEffect(() => {
-    if (!open || !ip?.trim() || !baseUrl.trim()) return
+    if (!open || hostName === null || wifiName === null || !baseUrl.trim()) return
 
     const wsBase = httpToWebSocketBase(baseUrl.replace(/\/$/, ''))
-    const path = `${wsBase}/api/v1/connections/${encodeURIComponent(ip.trim())}`
+    const qs = new URLSearchParams({
+      host_name: hostName,
+      wifi_name: wifiName,
+    })
+    const path = `${wsBase}/api/v1/connections/stream?${qs.toString()}`
     const ws = new WebSocket(path)
+
+    ws.onopen = () => {
+      setError(null)
+      setConnected(true)
+    }
 
     ws.onmessage = (ev) => {
       try {
@@ -123,9 +142,14 @@ export function ConnectionTrafficModal({ open, onOpenChange, ip, baseUrl }: Conn
           setAwaitingFirst(false)
           return
         }
-        if (msg.type === 'update' && Array.isArray(msg.data) && msg.data.length > 0) {
+        if (msg.type === 'update') {
+          const list = Array.isArray(msg.data) ? msg.data : []
+          if (list.length === 0) {
+            // No new samples from agent; keep chart as-is (static).
+            return
+          }
           setPoints((prev) => {
-            const next = [...prev, ...rowsToPoints(msg.data)]
+            const next = [...prev, ...rowsToPoints(list)]
             return next.slice(-CHART_MAX_POINTS)
           })
           setAwaitingFirst(false)
@@ -141,10 +165,17 @@ export function ConnectionTrafficModal({ open, onOpenChange, ip, baseUrl }: Conn
       setAwaitingFirst(false)
     }
 
+    ws.onclose = () => {
+      setConnected(false)
+    }
+
     return () => {
       ws.close()
     }
-  }, [open, ip, baseUrl])
+  }, [open, hostName, wifiName, baseUrl])
+
+  const titleSuffix =
+    hostName !== null && wifiName !== null ? `${hostName} · ${wifiName}` : ''
 
   const data: ChartData<'line', number[], string> = {
     labels: points.map((p) => p.t),
@@ -176,9 +207,10 @@ export function ConnectionTrafficModal({ open, onOpenChange, ip, baseUrl }: Conn
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Connection traffic{ip ? ` — ${ip}` : ''}</DialogTitle>
+          <DialogTitle>Connection traffic{titleSuffix ? ` — ${titleSuffix}` : ''}</DialogTitle>
           <DialogDescription>
-            Per-interval upload and download (last {CHART_MAX_POINTS} samples), updated every second from the server.
+            Per-interval upload and download for this display name and Wi‑Fi (last {CHART_MAX_POINTS}{' '}
+            samples). When the agent is idle, the chart stays on the last data.
           </DialogDescription>
         </DialogHeader>
 
@@ -189,11 +221,15 @@ export function ConnectionTrafficModal({ open, onOpenChange, ip, baseUrl }: Conn
         )}
 
         {awaitingFirst && !error && (
-          <p className="text-sm text-muted-foreground">Connecting…</p>
+          <p className="text-sm text-muted-foreground">
+            {connected ? 'Loading history…' : 'Connecting…'}
+          </p>
         )}
 
         {!awaitingFirst && !error && points.length === 0 && (
-          <p className="text-sm text-muted-foreground">No traffic samples for this user yet.</p>
+          <p className="text-sm text-muted-foreground">
+            No traffic samples for this session yet. The chart will fill in when the agent sends data.
+          </p>
         )}
 
         {points.length > 0 && (

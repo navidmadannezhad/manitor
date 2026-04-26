@@ -47,6 +47,7 @@ type TrafficLog struct {
 
 type AgentPayload struct {
 	SystemIP  string       `json:"system_ip"`
+	HostName  string       `json:"host_name"`
 	WiFiName  string       `json:"wifi_name"`
 	Logs      []TrafficLog `json:"logs"`
 	Collected time.Time    `json:"collected_at"`
@@ -135,6 +136,7 @@ func (a *Agent) collectAndSend() {
 func (a *Agent) collectPayload() (AgentPayload, error) {
 	now := time.Now().UTC()
 	systemIP := primaryIPv4()
+	hostName := agentFriendlyName()
 	logs := make([]TrafficLog, 0, 2)
 	wifiName := currentWiFiName(now)
 
@@ -168,6 +170,7 @@ func (a *Agent) collectPayload() (AgentPayload, error) {
 
 	return AgentPayload{
 		SystemIP:  systemIP,
+		HostName:  hostName,
 		WiFiName:  wifiName,
 		Logs:      logs,
 		Collected: now,
@@ -248,7 +251,7 @@ func (a *Agent) sendWithRetry(payload AgentPayload) error {
 		cancel()
 		if err == nil && resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			_ = resp.Body.Close()
-			log.Println("payload sent successfully")
+			log.Printf("payload sent successfully display_name=%q", agentFriendlyName())
 			return nil
 		}
 		if resp != nil {
@@ -345,8 +348,9 @@ func logRealtimeSnapshot() {
 	wifiName := currentWiFiName(now)
 
 	log.Printf(
-		"[realtime] time=%s host_ip=%s wifi_name=%q upload_1s=%dB download_1s=%dB",
+		"[realtime] time=%s display_name=%q host_ip=%s wifi_name=%q upload_1s=%dB download_1s=%dB",
 		now.Format(time.RFC3339),
+		agentFriendlyName(),
 		primaryIPv4(),
 		wifiName,
 		upDelta,

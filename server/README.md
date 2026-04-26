@@ -12,13 +12,13 @@ Go HTTP service that receives client telemetry and stores normalized connection 
 
 - Ingest endpoint at `POST /api/v1/connections` (also accepts `POST /`)
 - SQLite storage (`manitor.db`) with `connections` table
-- Incremental total fields per IP:
+- Incremental total fields per **display name + Wi‑Fi** pair (same `hostname` and `wifiname` as the previous row for that pair):
   - `total_download = previous_total_download + download_size`
   - `total_upload = previous_total_upload + upload_size`
 - Daily reset at local midnight (`00:00`) that fully clears data
 - Health endpoint at `GET /health`
 - Listing endpoint at `GET /api/v1/connections` with sorting query support
-- Realtime socket endpoint at `GET /api/v1/connections/:ip` (WebSocket)
+- Realtime socket at `GET /api/v1/connections/stream?host_name=...&wifi_name=...` (WebSocket; query values are normalized like ingest)
 
 ## Query sorting for list API
 
@@ -38,17 +38,18 @@ Examples:
 
 Connect to:
 
-- `ws://localhost:5000/api/v1/connections/172.16.0.2`
+- `ws://localhost:5000/api/v1/connections/stream?host_name=Jane&wifi_name=HomeNet` (URL-encode as needed)
 
 Server messages:
 
-- `type=history` -> full chart history for the IP
-- `type=update` -> newly inserted rows every second
+- `type=history` -> full chart history for that display name + Wi‑Fi session
+- `type=update` -> newly inserted rows for that session when present (otherwise connection stays open with no message; chart can stay static)
 
 ## Connection model
 
 - `id` (primary key)
-- `ip`
+- `ip` (agent system IP; informational)
+- `hostname` (display name from agent `host_name`)
 - `wifiname`
 - `download_size`
 - `upload_size`

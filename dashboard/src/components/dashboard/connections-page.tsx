@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 type Connection = {
   id?: string | number
   ip?: string
+  host_name?: string
+  hostName?: string
   wifiName?: string
   wifi_name?: string
   upload_size?: number | string
@@ -42,7 +44,7 @@ export function ConnectionsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartOpen, setChartOpen] = useState(false)
-  const [chartIp, setChartIp] = useState<string | null>(null)
+  const [chartSession, setChartSession] = useState<{ host: string; wifi: string } | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -88,7 +90,7 @@ export function ConnectionsPage() {
     if (loading) {
       return (
         <tr>
-          <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+          <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
             Loading connections...
           </td>
         </tr>
@@ -98,7 +100,7 @@ export function ConnectionsPage() {
     if (error) {
       return (
         <tr>
-          <td colSpan={5} className="px-4 py-10 text-center text-sm text-destructive">
+          <td colSpan={6} className="px-4 py-10 text-center text-sm text-destructive">
             {error}
           </td>
         </tr>
@@ -108,19 +110,24 @@ export function ConnectionsPage() {
     if (!rows.length) {
       return (
         <tr>
-          <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+          <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
             No connection records found.
           </td>
         </tr>
       )
     }
 
-    return rows.map((row, index) => (
-      <tr key={String(row.id ?? `${row.ip}-${index}`)} className="border-t border-border/70">
+    return rows.map((row, index) => {
+      const host = String(row.host_name ?? row.hostName ?? '').trim()
+      const wifi = String(row.wifi_name ?? row.wifiName ?? '').trim()
+      return (
+      <tr
+        key={String(row.id ?? `${host}-${wifi}-${index}`)}
+        className="border-t border-border/70"
+      >
         <td className="px-4 py-3 text-sm text-foreground">{row.ip ?? '-'}</td>
-        <td className="px-4 py-3 text-sm text-foreground">
-          {row.wifiName ?? row.wifi_name ?? '-'}
-        </td>
+        <td className="px-4 py-3 text-sm text-foreground">{host || '-'}</td>
+        <td className="px-4 py-3 text-sm text-foreground">{wifi || '-'}</td>
         <td className="px-4 py-3 text-sm text-foreground">
           {formatBytes(row.total_download ?? row.download_size ?? '-')}
         </td>
@@ -133,10 +140,9 @@ export function ConnectionsPage() {
             variant="ghost"
             size="icon"
             aria-label="View live traffic"
-            disabled={!serverBaseUrl || !row.ip}
+            disabled={!serverBaseUrl}
             onClick={() => {
-              if (!row.ip) return
-              setChartIp(String(row.ip))
+              setChartSession({ host: host || 'unknown', wifi: wifi || 'unknown' })
               setChartOpen(true)
             }}
           >
@@ -144,7 +150,7 @@ export function ConnectionsPage() {
           </Button>
         </td>
       </tr>
-    ))
+    )})
   }, [error, loading, rows])
 
   return (
@@ -154,26 +160,30 @@ export function ConnectionsPage() {
           open={chartOpen}
           onOpenChange={(open) => {
             setChartOpen(open)
-            if (!open) setChartIp(null)
+            if (!open) setChartSession(null)
           }}
-          ip={chartIp}
+          hostName={chartSession?.host ?? null}
+          wifiName={chartSession?.wifi ?? null}
           baseUrl={serverBaseUrl}
         />
       )}
       <div className="rounded-lg border border-border bg-card/40 p-4 sm:p-6">
         <h2 className="text-lg font-semibold text-foreground">Connections</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Monitor known network connections and bandwidth consumption.
+          Usage per display name and Wi‑Fi (running totals continue only while that pair matches). Resets daily at midnight on the server.
         </p>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-card/30">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse">
+          <table className="w-full min-w-[880px] border-collapse">
             <thead className="bg-secondary/50">
               <tr className="text-left">
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   IP
+                </th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Display name
                 </th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Wifi Name
