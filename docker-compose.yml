@@ -3,18 +3,18 @@ services:
   server:
     build: ./server
     ports:
-      - "5000:5000"
+      - "5000:9293"
     volumes:
       - server_data:/data
     environment:
-      SERVER_CLIENT: ":5000"
+      SERVER_CLIENT: ":9293"
     restart: unless-stopped
 
   dashboard:
     build:
       context: ./dashboard
       args:
-        VITE_SERVER_BASE_URL: ${VITE_SERVER_BASE_URL:-http://localhost:5000}
+        VITE_SERVER_BASE_URL: ${VITE_SERVER_BASE_URL:-http://localhost:9293}
     ports:
       - "3000:80"
     depends_on:
