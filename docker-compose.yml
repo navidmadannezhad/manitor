@@ -3,7 +3,7 @@ services:
   server:
     build: ./server
     ports:
-      - "9292:5000"
+      - "9292:9293"
     volumes:
       - server_data:/data
     environment:
