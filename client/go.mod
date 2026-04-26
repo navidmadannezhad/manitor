@@ -4,8 +4,8 @@ go 1.22.0
 
 require (
 	github.com/getlantern/systray v1.2.2
-	github.com/joho/godotenv v1.5.1
 	github.com/shirou/gopsutil/v3 v3.24.5
+	golang.org/x/sys v0.20.0
 )
 
 require (
@@ -20,5 +20,4 @@ require (
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/sys v0.20.0 // indirect
 )

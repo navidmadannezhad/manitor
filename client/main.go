@@ -5,24 +5,24 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/getlantern/systray"
-	"github.com/joho/godotenv"
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
 //go:embed manitor-logo.ico
 var trayIcon []byte
+
+// serverClientURL: full Manitor ingest URL (POST /api/v1/connections). Edit and rebuild to change.
+const serverClientURL = "http://5.63.13.218:9292/api/v1/connections"
 
 const (
 	collectInterval  = 1 * time.Second
@@ -67,7 +67,6 @@ var (
 	realtimeInitialized bool
 	lastWiFiName        string
 	lastWiFiCheck       time.Time
-	serverClientURL     = "http://localhost:5000/api/v1/connections"
 )
 
 func NewAgent() *Agent {
@@ -84,13 +83,35 @@ func (a *Agent) Activate() {
 		return
 	}
 	a.active = true
+	ch := a.stopCh
 	a.mu.Unlock()
 
-	go a.run()
+	go a.run(ch)
 	log.Println("agent activated")
 }
 
-func (a *Agent) run() {
+func (a *Agent) IsActive() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.active
+}
+
+// Stop deactivates the agent; the process keeps running. Safe to call again.
+func (a *Agent) Stop() {
+	a.mu.Lock()
+	if !a.active {
+		a.mu.Unlock()
+		return
+	}
+	a.active = false
+	ch := a.stopCh
+	a.stopCh = make(chan struct{})
+	a.mu.Unlock()
+	close(ch)
+	log.Println("agent stopped")
+}
+
+func (a *Agent) run(stop <-chan struct{}) {
 	ticker := time.NewTicker(collectInterval)
 	defer ticker.Stop()
 
@@ -98,7 +119,7 @@ func (a *Agent) run() {
 
 	for {
 		select {
-		case <-a.stopCh:
+		case <-stop:
 			return
 		case <-ticker.C:
 			a.collectAndSend()
@@ -106,15 +127,9 @@ func (a *Agent) run() {
 	}
 }
 
+// Shutdown stops the agent if running (same as Stop). Use before process exit.
 func (a *Agent) Shutdown() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if !a.active {
-		return
-	}
-	a.active = false
-	close(a.stopCh)
-	log.Println("agent deactivated")
+	a.Stop()
 }
 
 func (a *Agent) collectAndSend() {
@@ -256,7 +271,7 @@ func (a *Agent) sendWithRetry(payload AgentPayload) error {
 		}
 		if resp != nil {
 			if err == nil {
-				err = errors.New(fmt.Sprintf("unexpected status code: %d", resp.StatusCode))
+				err = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 			}
 			_ = resp.Body.Close()
 		}
@@ -269,26 +284,40 @@ func (a *Agent) sendWithRetry(payload AgentPayload) error {
 func onReady() {
 	systray.SetIcon(trayIcon)
 	systray.SetTitle("Manitor Client")
-	systray.SetTooltip("Manitor Client Agent")
+	systray.SetTooltip("Manitor — inactive")
 
-	activate := systray.AddMenuItem("Activate", "Activate client agent")
-	exit := systray.AddMenuItem("Exit", "Deactivate and exit")
+	toggle := systray.AddMenuItem("Activate", "Start or stop sending telemetry to the server")
+	checkLogs := systray.AddMenuItem("Check logs", "Open a window with log output (PowerShell + tail)")
+	exit := systray.AddMenuItem("Exit", "Quit the client")
 
 	agent := NewAgent()
-	realtimeStop := make(chan struct{})
-	realtimeStarted := false
+	var realtimeStop chan struct{}
 
 	go func() {
 		for {
 			select {
-			case <-activate.ClickedCh:
-				agent.Activate()
-				if !realtimeStarted {
-					realtimeStarted = true
+			case <-toggle.ClickedCh:
+				if agent.IsActive() {
+					agent.Stop()
+					if realtimeStop != nil {
+						close(realtimeStop)
+						realtimeStop = nil
+					}
+					toggle.SetTitle("Activate")
+					systray.SetTooltip("Manitor — inactive")
+				} else {
+					agent.Activate()
+					realtimeStop = make(chan struct{})
 					go runRealtimeDebugLogs(realtimeStop)
+					toggle.SetTitle("Deactivate")
+					systray.SetTooltip("Manitor — active")
 				}
+			case <-checkLogs.ClickedCh:
+				openLogViewerInTerminal()
 			case <-exit.ClickedCh:
-				close(realtimeStop)
+				if realtimeStop != nil {
+					close(realtimeStop)
+				}
 				agent.Shutdown()
 				systray.Quit()
 				return
@@ -364,6 +393,7 @@ func currentWiFiName(now time.Time) string {
 	}
 
 	cmd := exec.Command("netsh", "wlan", "show", "interfaces")
+	setHideWindowForSubprocess(cmd)
 	out, err := cmd.Output()
 	lastWiFiCheck = now
 	if err != nil {
@@ -394,14 +424,7 @@ func parseSSID(raw string) string {
 }
 
 func main() {
-	loadConfig()
+	initLoggingForWindows()
+	log.Printf("ingest URL: %s", serverClientURL)
 	systray.Run(onReady, onExit)
-}
-
-func loadConfig() {
-	_ = godotenv.Load()
-	if v := strings.TrimSpace(os.Getenv("SERVER_CLIENT")); v != "" {
-		serverClientURL = v
-	}
-	log.Printf("SERVER_CLIENT=%s", serverClientURL)
 }

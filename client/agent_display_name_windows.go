@@ -15,6 +15,7 @@ func windowsAccountDisplayName() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps)
+	setHideWindowForSubprocess(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
