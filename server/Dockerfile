@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM hub.hamdocker.ir/golang:1.23-bookworm AS build
 WORKDIR /src
-RUN go env -w GOPROXY=https://package-mirror.liara.ir/repository/go/
+RUN go env -w GOPROXY=https://mirrors.pardisco.co/go
 RUN go env -w GOSUMDB=off
 RUN go env | grep GOPROXY
 
