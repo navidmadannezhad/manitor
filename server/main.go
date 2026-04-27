@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -60,7 +61,8 @@ type Connection struct {
 }
 
 type Server struct {
-	db *sql.DB
+	db      *sql.DB
+	writeMu sync.Mutex
 }
 
 var wsUpgrader = websocket.Upgrader{
@@ -108,10 +110,22 @@ func main() {
 }
 
 func openDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	dsn := path
+	if strings.Contains(dsn, "?") {
+		dsn += "&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	} else {
+		dsn += "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	}
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
+
+	// SQLite works best with one pooled connection in-process.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
@@ -221,6 +235,9 @@ func normalizeHostName(name string) string {
 }
 
 func (s *Server) insertConnection(ip, wifiname, hostname string, uploadSize, downloadSize uint64) (Connection, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Connection{}, err
@@ -537,6 +554,9 @@ func (s *Server) runMidnightReset() {
 }
 
 func (s *Server) resetConnections() error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
