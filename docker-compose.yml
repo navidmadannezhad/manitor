@@ -12,8 +12,8 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       DB_NAME: ${POSTGRES_DB:-manitor}
       DB_SSL_MODE: ${POSTGRES_SSLMODE:-disable}
-    depends_on:
-      - postgres
+    networks:
+      - devopsio
     restart: unless-stopped
 
   dashboard:
@@ -25,7 +25,15 @@ services:
       - "9293:80"
     depends_on:
       - server
+    networks:
+      - devopsio
     restart: unless-stopped
 
 volumes:
   postgres_data:
+
+networks:
+  devopsio:
+    name: devopsio
+    external: true
+  
