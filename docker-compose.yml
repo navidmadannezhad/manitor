@@ -16,12 +16,12 @@ services:
       - "9292:9293"
     environment:
       SERVER_CLIENT: ":9293"
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-manitor}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      DB_HOST: postgres
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_NAME: ${POSTGRES_DB:-manitor}
+      DB_SSL_MODE: ${POSTGRES_SSLMODE:-disable}
     depends_on:
       - postgres
     restart: unless-stopped
