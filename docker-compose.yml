@@ -6,7 +6,7 @@ services:
       - "9292:9293"
     environment:
       SERVER_CLIENT: ":9293"
-      DB_HOST: ${POSTGRES_HOST:postgres-kalif}
+      DB_HOST: ${POSTGRES_HOST:-postgres-kalif}
       DB_PORT: ${POSTGRES_PORT:-5432}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
