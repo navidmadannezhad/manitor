@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"manitor-server/utils"
 	"net"
 	"net/http"
 	"os"
@@ -17,14 +18,19 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/joho/godotenv"
-	_ "modernc.org/sqlite"
+	_ "github.com/lib/pq"
 )
 
 const (
-	defaultDB   = "manitor.db"
 	defaultAddr = ":5000"
 )
+
+var DB_HOST = utils.GetFromEnv("DB_HOST")
+var DB_PORT = utils.GetFromEnv("DB_PORT")
+var DB_USER = utils.GetFromEnv("DB_USER")
+var DB_PASSWORD = utils.GetFromEnv("DB_PASSWORD")
+var DB_NAME = utils.GetFromEnv("DB_NAME")
+var DB_SSL_MODE = utils.GetFromEnv("DB_SSL_MODE")
 
 type Direction string
 
@@ -72,7 +78,7 @@ var wsUpgrader = websocket.Upgrader{
 func main() {
 	listenAddr := loadConfig()
 
-	db, err := openDB(defaultDB)
+	db, err := openDB()
 	if err != nil {
 		log.Fatalf("open db: %v", err)
 	}
@@ -109,22 +115,22 @@ func main() {
 	waitForShutdown(httpServer)
 }
 
-func openDB(path string) (*sql.DB, error) {
-	dsn := path
-	if strings.Contains(dsn, "?") {
-		dsn += "&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
-	} else {
-		dsn += "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
-	}
+func openDB() (*sql.DB, error) {
+	dsn := "host=" + DB_HOST +
+		" port=" + DB_PORT +
+		" user=" + DB_USER +
+		" password=" + DB_PASSWORD +
+		" dbname=" + DB_NAME +
+		" sslmode=" + DB_SSL_MODE
 
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	// SQLite works best with one pooled connection in-process.
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(30 * time.Minute)
 
 	if err := db.Ping(); err != nil {
 		return nil, err
@@ -135,15 +141,15 @@ func openDB(path string) (*sql.DB, error) {
 func ensureSchema(db *sql.DB) error {
 	_, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS connections (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	id BIGSERIAL PRIMARY KEY,
 	ip TEXT NOT NULL,
 	wifiname TEXT NOT NULL,
 	hostname TEXT NOT NULL DEFAULT '',
-	download_size INTEGER NOT NULL,
-	upload_size INTEGER NOT NULL,
-	total_download INTEGER NOT NULL,
-	total_upload INTEGER NOT NULL,
-	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	download_size BIGINT NOT NULL,
+	upload_size BIGINT NOT NULL,
+	total_download BIGINT NOT NULL,
+	total_upload BIGINT NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_connections_ip ON connections(ip);
 CREATE INDEX IF NOT EXISTS idx_connections_created_at ON connections(created_at);
@@ -155,7 +161,13 @@ CREATE INDEX IF NOT EXISTS idx_connections_host_wifi_id ON connections(hostname,
 
 func ensureHostnameColumn(db *sql.DB) error {
 	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('connections') WHERE name = 'hostname'`).Scan(&n); err != nil {
+	if err := db.QueryRow(`
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = current_schema()
+	AND table_name = 'connections'
+	AND column_name = 'hostname'
+`).Scan(&n); err != nil {
 		return err
 	}
 	if n > 0 {
@@ -250,7 +262,7 @@ func (s *Server) insertConnection(ip, wifiname, hostname string, uploadSize, dow
 	err = tx.QueryRow(`
 SELECT total_upload, total_download
 FROM connections
-WHERE hostname = ? AND wifiname = ?
+WHERE hostname = $1 AND wifiname = $2
 ORDER BY id DESC
 LIMIT 1
 `, hostname, wifiname).Scan(&prevTotalUpload, &prevTotalDownload)
@@ -266,15 +278,12 @@ LIMIT 1
 	newTotalDownload := prevTotalDownload + downloadSize
 
 	now := time.Now().UTC()
-	res, err := tx.Exec(`
+	var id int64
+	err = tx.QueryRow(`
 INSERT INTO connections (ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-`, ip, wifiname, hostname, downloadSize, uploadSize, newTotalDownload, newTotalUpload, now)
-	if err != nil {
-		return Connection{}, err
-	}
-
-	id, err := res.LastInsertId()
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id
+`, ip, wifiname, hostname, downloadSize, uploadSize, newTotalDownload, newTotalUpload, now).Scan(&id)
 	if err != nil {
 		return Connection{}, err
 	}
@@ -356,7 +365,7 @@ INNER JOIN (
 	GROUP BY hostname, wifiname
 ) latest ON c.hostname = latest.hostname AND c.wifiname = latest.wifiname AND c.id = latest.max_id
 ORDER BY ` + strings.Join(orderBy, ", ") + `
-LIMIT ?
+LIMIT $1
 `
 	return query, limit
 }
@@ -512,9 +521,9 @@ func (s *Server) listConnectionsBySession(hostname, wifiname string, limit int) 
 	rows, err := s.db.Query(`
 SELECT id, ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at
 FROM connections
-WHERE hostname = ? AND wifiname = ?
+WHERE hostname = $1 AND wifiname = $2
 ORDER BY id ASC
-LIMIT ?
+LIMIT $3
 `, hostname, wifiname, limit)
 	if err != nil {
 		return nil, err
@@ -527,9 +536,9 @@ func (s *Server) listConnectionsBySessionAfterID(hostname, wifiname string, afte
 	rows, err := s.db.Query(`
 SELECT id, ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at
 FROM connections
-WHERE hostname = ? AND wifiname = ? AND id > ?
+WHERE hostname = $1 AND wifiname = $2 AND id > $3
 ORDER BY id ASC
-LIMIT ?
+LIMIT $4
 `, hostname, wifiname, afterID, limit)
 	if err != nil {
 		return nil, err
@@ -563,10 +572,7 @@ func (s *Server) resetConnections() error {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`DELETE FROM connections;`); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`DELETE FROM sqlite_sequence WHERE name = 'connections';`); err != nil {
+	if _, err := tx.Exec(`TRUNCATE TABLE connections RESTART IDENTITY;`); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -624,8 +630,7 @@ func waitForShutdown(httpServer *http.Server) {
 }
 
 func loadConfig() string {
-	_ = godotenv.Load()
-	raw := strings.TrimSpace(os.Getenv("SERVER_CLIENT"))
+	raw := strings.TrimSpace(utils.GetFromEnv(("SERVER_CLIENT")))
 	if raw == "" {
 		return defaultAddr
 	}

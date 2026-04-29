@@ -1,13 +1,29 @@
 # Full stack: API + static dashboard. From your machine, the UI calls the API at localhost:5000.
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-manitor}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   server:
     build: ./server
     ports:
       - "9292:9293"
-    volumes:
-      - server_data:/data
     environment:
       SERVER_CLIENT: ":9293"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-manitor}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   dashboard:
@@ -22,4 +38,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  server_data:
+  postgres_data:
