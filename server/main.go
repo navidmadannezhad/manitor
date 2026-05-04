@@ -79,6 +79,11 @@ var wsUpgrader = websocket.Upgrader{
 func main() {
 	listenAddr := loadConfig()
 
+	fmt.Println("Test log --")
+	fmt.Println(DB_HOST)
+	fmt.Println(DB_PORT)
+	fmt.Println(DB_NAME)
+
 	db, err := openDB()
 	if err != nil {
 		log.Fatalf("open db: %v", err)
@@ -248,12 +253,6 @@ func normalizeHostName(name string) string {
 }
 
 func (s *Server) insertConnection(ip, wifiname, hostname string, uploadSize, downloadSize uint64) (Connection, error) {
-
-	fmt.Println("Test log --")
-	fmt.Println(DB_HOST)
-	fmt.Println(DB_PORT)
-	fmt.Println(DB_NAME)
-
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
