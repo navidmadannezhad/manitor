@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"manitor-server/utils"
 	"net"
@@ -247,6 +248,12 @@ func normalizeHostName(name string) string {
 }
 
 func (s *Server) insertConnection(ip, wifiname, hostname string, uploadSize, downloadSize uint64) (Connection, error) {
+
+	fmt.Println("Test log --")
+	fmt.Println(DB_HOST)
+	fmt.Println(DB_PORT)
+	fmt.Println(DB_NAME)
+
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
@@ -291,6 +298,9 @@ RETURNING id
 	if err := tx.Commit(); err != nil {
 		return Connection{}, err
 	}
+
+	fmt.Println("Insert Data")
+	fmt.Println(hostname)
 
 	return Connection{
 		ID:            id,
