@@ -1,29 +1,19 @@
 # Full stack: API + static dashboard. From your machine, the UI calls the API at localhost:5000.
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-manitor}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-
   server:
     build: ./server
     ports:
       - "9292:9293"
     environment:
       SERVER_CLIENT: ":9293"
-      DB_HOST: postgres
+      DB_HOST: ${POSTGRES_HOST:-postgres-kalif}
       DB_PORT: ${POSTGRES_PORT:-5432}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       DB_NAME: ${POSTGRES_DB:-manitor}
       DB_SSL_MODE: ${POSTGRES_SSLMODE:-disable}
-    depends_on:
-      - postgres
+    networks:
+      - devopsio
     restart: unless-stopped
 
   dashboard:
@@ -35,7 +25,15 @@ services:
       - "9293:80"
     depends_on:
       - server
+    networks:
+      - devopsio
     restart: unless-stopped
 
 volumes:
   postgres_data:
+
+networks:
+  devopsio:
+    name: devopsio
+    external: true
+  
