@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM hub.hamdocker.ir/node:22-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9 --activate
 COPY package.json pnpm-lock.yaml ./
@@ -10,7 +10,7 @@ ARG VITE_SERVER_BASE_URL=http://localhost:5000
 ENV VITE_SERVER_BASE_URL=$VITE_SERVER_BASE_URL
 RUN pnpm run build
 
-FROM hub.hamdocker.ir/nginx:1.27-alpine
+FROM nginx:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
