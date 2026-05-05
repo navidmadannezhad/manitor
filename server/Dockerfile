@@ -17,3 +17,4 @@ ENV SERVER_CLIENT=:5000
 COPY --from=build /out/manitor-server /manitor-server
 EXPOSE 5000
 ENTRYPOINT ["/manitor-server"]
+
