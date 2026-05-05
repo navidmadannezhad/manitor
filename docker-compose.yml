@@ -6,12 +6,12 @@ services:
       - "9292:9293"
     environment:
       SERVER_CLIENT: ":9293"
-      DB_HOST: ${POSTGRES_HOST:-postgres-kalif}
-      DB_PORT: ${POSTGRES_PORT:-5432}
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      DB_NAME: ${POSTGRES_DB:-manitor}
-      DB_SSL_MODE: ${POSTGRES_SSLMODE:-disable}
+      DB_HOST: ${DB_HOST:-postgres-kalif}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-manitor}
+      DB_SSL_MODE: ${DB_SSL_MODE:-disable}
     networks:
       - devopsio
     restart: unless-stopped
