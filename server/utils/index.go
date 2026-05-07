@@ -6,12 +6,13 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func GetFromEnv(key string) string {
-	err := godotenv.Load()
-	if err != nil {
-		return ""
+func init() {
+	// اگر فایل .env وجود داشت لود کن
+	if _, err := os.Stat(".env"); err == nil {
+		godotenv.Load()
 	}
+}
 
-	value := os.Getenv(key)
-	return value
+func GetFromEnv(key string) string {
+	return os.Getenv(key)
 }
