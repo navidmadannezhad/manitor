@@ -14,6 +14,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /out/manitor-server .
 FROM hub.hamdocker.ir/alpine:latest
 WORKDIR /data
 ENV SERVER_CLIENT=:5000
+COPY .env .env
 COPY --from=build /out/manitor-server /manitor-server
 EXPOSE 5000
 ENTRYPOINT ["/manitor-server"]
