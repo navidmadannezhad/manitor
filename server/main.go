@@ -79,11 +79,6 @@ var wsUpgrader = websocket.Upgrader{
 func main() {
 	listenAddr := loadConfig()
 
-	fmt.Println("Test log --")
-	fmt.Println(DB_HOST)
-	fmt.Println(DB_PORT)
-	fmt.Println(DB_NAME)
-
 	db, err := openDB()
 	if err != nil {
 		log.Fatalf("open db: %v", err)

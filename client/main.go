@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"manitor-client/utils"
 	"net"
 	"net/http"
 	"os/exec"
@@ -22,7 +23,7 @@ import (
 var trayIcon []byte
 
 // serverClientURL: full Manitor ingest URL (POST /api/v1/connections). Edit and rebuild to change.
-const serverClientURL = "http://5.63.13.218:9292/api/v1/connections"
+var serverClientURL = utils.GetFromEnv("SERVER_URL")
 
 const (
 	collectInterval  = 1 * time.Second
