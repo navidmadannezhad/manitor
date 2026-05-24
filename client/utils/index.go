@@ -7,7 +7,6 @@ import (
 )
 
 func init() {
-	// اگر فایل .env وجود داشت لود کن
 	if _, err := os.Stat(".env"); err == nil {
 		godotenv.Load()
 	}
