@@ -23,3 +23,8 @@ type AgentPayload struct {
 	Collected time.Time    `json:"collected_at"`
 	Logs      []TrafficLog `json:"logs"`
 }
+
+type QueryParameters struct {
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
+}

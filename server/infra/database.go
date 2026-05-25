@@ -19,7 +19,7 @@ var DB_SSL_MODE = utils.GetFromEnv("DB_SSL_MODE")
 
 var DB *gorm.DB
 
-func InitiateDatabaseConnection() {
+func InitiateDatabaseConnection() error {
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
 		DB_HOST,
@@ -32,11 +32,23 @@ func InitiateDatabaseConnection() {
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		return err
 	}
 
 	DB = db
 	fmt.Println("Database - Connected!")
+	return nil
+}
+
+func TerminateDatabaseConnection() error {
+	dbHandler, err := DB.DB()
+	if err != nil {
+		return err
+	}
+
+	dbHandler.Close()
+	fmt.Println("Databse - Disconnected!")
+	return nil
 }
 
 func InitiateMigration() {
