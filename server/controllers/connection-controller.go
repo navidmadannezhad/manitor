@@ -24,7 +24,7 @@ func HandleHealth(requestContext *gin.Context) {
 }
 
 func CreateConnection(requestContext *gin.Context) {
-	var requestBody CreateControllerBodyDTO
+	var requestBody CreateConnectionBodyDTO
 	err := requestContext.Bind(&requestBody)
 	if err != nil {
 		requestContext.AbortWithStatusJSON(
@@ -90,6 +90,19 @@ func HandleSessionStreamSocket(context *gin.Context) {
 }
 
 func GetConnections(requestContext *gin.Context) {
+	var queryParams GetConnectionsQueryParamsDTO
+	err := requestContext.BindQuery(&queryParams)
+
+	if err != nil {
+		requestContext.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			utils.ResolveError(err),
+		)
+		return
+	}
+
+	fmt.Println(queryParams)
+
 	intPage, pageErr := strconv.Atoi(requestContext.DefaultQuery("page", "1"))
 	intPageSize, pageSizeErr := strconv.Atoi(requestContext.DefaultQuery("pageSize", "10"))
 
