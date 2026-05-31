@@ -9,6 +9,7 @@ import (
 	"manitor-server/utils"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -49,6 +50,15 @@ func CreateConnection(requestContext *gin.Context) {
 	fmt.Println(requestBody.HostName)
 	wifiName := utils.GetUnknownIfEmpty(requestBody.WiFiName)
 	hostName := utils.GetUnknownIfEmpty(requestBody.HostName)
+	collectedAt, err := time.Parse(time.RFC3339, requestBody.CollectedAt)
+
+	if err != nil {
+		requestContext.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			utils.ResolveError(err),
+		)
+		return
+	}
 
 	var createBody = models.Connection{
 		IP:           requestBody.SystemIP,
@@ -56,6 +66,7 @@ func CreateConnection(requestContext *gin.Context) {
 		HostName:     hostName,
 		DownloadSize: downloadSize,
 		UploadSize:   uploadSize,
+		CollectedAt:  collectedAt,
 	}
 	err = repository.CreateConnection(&createBody)
 	if err != nil {
