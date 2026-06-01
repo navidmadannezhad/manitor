@@ -1,14 +1,12 @@
 package controllers
 
 import (
-	"errors"
 	"fmt"
 	"manitor-server/models"
 	"manitor-server/repository"
 	"manitor-server/types"
 	"manitor-server/utils"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +22,7 @@ func HandleHealth(requestContext *gin.Context) {
 }
 
 func CreateConnection(requestContext *gin.Context) {
-	var requestBody CreateConnectionBodyDTO
+	var requestBody types.CreateConnectionBodyDTO
 	err := requestContext.Bind(&requestBody)
 	if err != nil {
 		requestContext.AbortWithStatusJSON(
@@ -90,9 +88,9 @@ func HandleSessionStreamSocket(context *gin.Context) {
 }
 
 func GetConnections(requestContext *gin.Context) {
-	var queryParams GetConnectionsQueryParamsDTO
-	err := requestContext.BindQuery(&queryParams)
 
+	var queryParams types.GetConnectionsQueryParamsDTO
+	err := requestContext.BindQuery(&queryParams)
 	if err != nil {
 		requestContext.AbortWithStatusJSON(
 			http.StatusBadRequest,
@@ -101,31 +99,11 @@ func GetConnections(requestContext *gin.Context) {
 		return
 	}
 
-	fmt.Println(queryParams)
-
-	intPage, pageErr := strconv.Atoi(requestContext.DefaultQuery("page", "1"))
-	intPageSize, pageSizeErr := strconv.Atoi(requestContext.DefaultQuery("pageSize", "10"))
-
-	if pageErr != nil && pageSizeErr != nil {
-		requestContext.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			utils.ResolveError(
-				errors.New("Error in parsing parameters"),
-			),
-		)
-		return
-	}
-
-	params := types.QueryParameters{
-		Page:     intPage,
-		PageSize: intPageSize,
-	}
-
-	connections, err := repository.GetConnections(requestContext, params)
+	connections, err := repository.GetConnections(requestContext, queryParams)
 	if err != nil {
 		requestContext.AbortWithStatusJSON(
 			http.StatusBadGateway,
-			utils.ResolveError(pageErr),
+			utils.ResolveError(err),
 		)
 		return
 	}

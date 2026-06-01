@@ -8,12 +8,16 @@ import (
 	"manitor-server/utils"
 )
 
-func GetConnections(requestContext context.Context, params types.QueryParameters) ([]models.Connection, error) {
+func GetConnections(requestContext context.Context, params types.GetConnectionsQueryParamsDTO) ([]models.Connection, error) {
 	var connections []models.Connection
-	result := infra.DB.WithContext(requestContext).Scopes(
-		utils.Paginate(params.Page, params.PageSize),
-	).Find(&connections)
 
+	query := infra.DB.WithContext(requestContext).Model(&models.Connection{})
+	parametrizedQuery, err := utils.GetParametrizedQueryInstance(query, params)
+	if err != nil {
+		return nil, err
+	}
+
+	result := parametrizedQuery.Find(&connections)
 	if result.Error != nil {
 		return nil, result.Error
 	}

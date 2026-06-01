@@ -24,7 +24,7 @@ type AgentPayload struct {
 	Logs      []TrafficLog `json:"logs"`
 }
 
-type QueryParameters struct {
-	Page     int `json:"page"`
-	PageSize int `json:"page_size"`
+type PaginationQueryParams struct {
+	Page     int `json:"page" form:"page"`
+	PageSize int `json:"page_size" form:"page_size"`
 }
