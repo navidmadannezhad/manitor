@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"fmt"
 	"manitor-server/models"
 	"manitor-server/repository"
 	"manitor-server/types"
@@ -43,9 +42,6 @@ func CreateConnection(requestContext *gin.Context) {
 	}
 
 	uploadSize, downloadSize := utils.GetTransferSizes(requestBody.Logs)
-	fmt.Println("سگ")
-	fmt.Println(requestBody.WiFiName)
-	fmt.Println(requestBody.HostName)
 	wifiName := utils.GetUnknownIfEmpty(requestBody.WiFiName)
 	hostName := utils.GetUnknownIfEmpty(requestBody.HostName)
 	collectedAt, err := time.Parse(time.RFC3339, requestBody.CollectedAt)
@@ -88,7 +84,6 @@ func HandleSessionStreamSocket(context *gin.Context) {
 }
 
 func GetConnections(requestContext *gin.Context) {
-
 	var queryParams types.GetConnectionsQueryParamsDTO
 	err := requestContext.BindQuery(&queryParams)
 	if err != nil {

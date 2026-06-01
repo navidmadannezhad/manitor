@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"manitor-client/utils"
 	"net"
 	"net/http"
 	"os/exec"
@@ -23,7 +22,7 @@ import (
 var trayIcon []byte
 
 // serverClientURL: full Manitor ingest URL (POST /api/v1/connections). Edit and rebuild to change.
-var serverClientURL = utils.GetFromEnv("SERVER_URL")
+var serverClientURL = "http://127.0.0.1:5000/api/v1/connections"
 
 const (
 	collectInterval  = 1 * time.Second
@@ -167,6 +166,8 @@ func (a *Agent) collectPayload() (AgentPayload, error) {
 	a.mu.Unlock()
 
 	up, down := computeIODeltas(prev, ioCounters)
+	fmt.Println("upload:", up)
+	fmt.Println("download:", down)
 	if up > 0 {
 		logs = append(logs, TrafficLog{
 			RequestURL: "system://all-interfaces",
@@ -256,6 +257,8 @@ func (a *Agent) sendWithRetry(payload AgentPayload) error {
 	var lastErr error
 	for i := 1; i <= maxRetries; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+		fmt.Print("SERVER HERE!")
+		fmt.Println(serverClientURL)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, serverClientURL, bytes.NewReader(body))
 		if err != nil {
 			cancel()
