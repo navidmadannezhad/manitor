@@ -12,7 +12,7 @@ Go HTTP service that receives client telemetry and stores normalized connection 
 
 - Ingest endpoint at `POST /api/v1/connections` (also accepts `POST /`)
 - SQLite storage (`manitor.db`) with `connections` table
-- Incremental total fields per **display name + Wi‑Fi** pair (same `hostname` and `wifiname` as the previous row for that pair):
+- Incremental total fields per **display name + Wi‑Fi** pair (same `hostname` and `WifiName` as the previous row for that pair):
   - `total_download = previous_total_download + download_size`
   - `total_upload = previous_total_upload + upload_size`
 - Daily reset at local midnight (`00:00`) that fully clears data
@@ -50,7 +50,7 @@ Server messages:
 - `id` (primary key)
 - `ip` (agent system IP; informational)
 - `hostname` (display name from agent `host_name`)
-- `wifiname`
+- `WifiName`
 - `download_size`
 - `upload_size`
 - `total_download`

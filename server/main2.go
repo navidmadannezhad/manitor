@@ -52,7 +52,7 @@ type TrafficLog struct {
 type AgentPayload struct {
 	SystemIP  string       `json:"system_ip"`
 	HostName  string       `json:"host_name,omitempty"`
-	WiFiName  string       `json:"wifi_name,omitempty"`
+	WifiName  string       `json:"wifi_name,omitempty"`
 	Collected time.Time    `json:"collected_at"`
 	Logs      []TrafficLog `json:"logs"`
 }
@@ -60,7 +60,7 @@ type AgentPayload struct {
 type Connection struct {
 	ID            int64     `json:"id"`
 	IP            string    `json:"ip"`
-	WiFiName      string    `json:"wifi_name"`
+	WifiName      string    `json:"wifi_name"`
 	HostName      string    `json:"host_name"`
 	DownloadSize  uint64    `json:"download_size"`
 	UploadSize    uint64    `json:"upload_size"`
@@ -143,7 +143,7 @@ func ensureSchema(db *sql.DB) error {
 CREATE TABLE IF NOT EXISTS connections (
 	id BIGSERIAL PRIMARY KEY,
 	ip TEXT NOT NULL,
-	wifiname TEXT NOT NULL,
+	WifiName TEXT NOT NULL,
 	hostname TEXT NOT NULL DEFAULT '',
 	download_size BIGINT NOT NULL,
 	upload_size BIGINT NOT NULL,
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS connections (
 CREATE INDEX IF NOT EXISTS idx_connections_ip ON connections(ip);
 CREATE INDEX IF NOT EXISTS idx_connections_created_at ON connections(created_at);
 CREATE INDEX IF NOT EXISTS idx_connections_ip_id ON connections(ip, id);
-CREATE INDEX IF NOT EXISTS idx_connections_host_wifi_id ON connections(hostname, wifiname, id);
+CREATE INDEX IF NOT EXISTS idx_connections_host_wifi_id ON connections(hostname, WifiName, id);
 `)
 	return err
 }
@@ -195,9 +195,9 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	upload, download := summarizeSizes(payload.Logs)
-	wifiName := normalizeWiFiName(payload.WiFiName)
+	WifiName := normalizeWifiName(payload.WifiName)
 	hostName := normalizeHostName(payload.HostName)
-	conn, err := s.insertConnection(payload.SystemIP, wifiName, hostName, upload, download)
+	conn, err := s.insertConnection(payload.SystemIP, WifiName, hostName, upload, download)
 	if err != nil {
 		log.Printf("insert failed: %v", err)
 		http.Error(w, "failed to persist payload", http.StatusInternalServerError)
@@ -230,7 +230,7 @@ func summarizeSizes(logs []TrafficLog) (upload uint64, download uint64) {
 	return upload, download
 }
 
-func normalizeWiFiName(name string) string {
+func normalizeWifiName(name string) string {
 	v := strings.TrimSpace(name)
 	if v == "" {
 		return "unknown"
@@ -246,7 +246,7 @@ func normalizeHostName(name string) string {
 	return v
 }
 
-func (s *Server) insertConnection(ip, wifiname, hostname string, uploadSize, downloadSize uint64) (Connection, error) {
+func (s *Server) insertConnection(ip, WifiName, hostname string, uploadSize, downloadSize uint64) (Connection, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
@@ -262,10 +262,10 @@ func (s *Server) insertConnection(ip, wifiname, hostname string, uploadSize, dow
 	err = tx.QueryRow(`
 SELECT total_upload, total_download
 FROM connections
-WHERE hostname = $1 AND wifiname = $2
+WHERE hostname = $1 AND WifiName = $2
 ORDER BY id DESC
 LIMIT 1
-`, hostname, wifiname).Scan(&prevTotalUpload, &prevTotalDownload)
+`, hostname, WifiName).Scan(&prevTotalUpload, &prevTotalDownload)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return Connection{}, err
 	}
@@ -280,10 +280,10 @@ LIMIT 1
 	now := time.Now().UTC()
 	var id int64
 	err = tx.QueryRow(`
-INSERT INTO connections (ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at)
+INSERT INTO connections (ip, WifiName, hostname, download_size, upload_size, total_download, total_upload, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id
-`, ip, wifiname, hostname, downloadSize, uploadSize, newTotalDownload, newTotalUpload, now).Scan(&id)
+`, ip, WifiName, hostname, downloadSize, uploadSize, newTotalDownload, newTotalUpload, now).Scan(&id)
 	if err != nil {
 		return Connection{}, err
 	}
@@ -298,7 +298,7 @@ RETURNING id
 	return Connection{
 		ID:            id,
 		IP:            ip,
-		WiFiName:      wifiname,
+		WifiName:      WifiName,
 		HostName:      hostname,
 		DownloadSize:  downloadSize,
 		UploadSize:    uploadSize,
@@ -360,13 +360,13 @@ func buildConnectionListQuery(r *http.Request) (string, int) {
 	limit := parseLimit(q.Get("limit"), 500)
 	// One row per (display name, Wi‑Fi): latest row per pair. Cumulative totals live on that row.
 	query := `
-SELECT c.id, c.ip, c.wifiname, c.hostname, c.download_size, c.upload_size, c.total_download, c.total_upload, c.created_at
+SELECT c.id, c.ip, c.WifiName, c.hostname, c.download_size, c.upload_size, c.total_download, c.total_upload, c.created_at
 FROM connections c
 INNER JOIN (
-	SELECT hostname, wifiname, MAX(id) AS max_id
+	SELECT hostname, WifiName, MAX(id) AS max_id
 	FROM connections
-	GROUP BY hostname, wifiname
-) latest ON c.hostname = latest.hostname AND c.wifiname = latest.wifiname AND c.id = latest.max_id
+	GROUP BY hostname, WifiName
+) latest ON c.hostname = latest.hostname AND c.WifiName = latest.WifiName AND c.id = latest.max_id
 ORDER BY ` + strings.Join(orderBy, ", ") + `
 LIMIT $1
 `
@@ -376,7 +376,7 @@ LIMIT $1
 // prefixOrderExprLatestPerSession maps list sort tokens to the aliased subquery in handleListConnections.
 func prefixOrderExprLatestPerSession(expr string) string {
 	expr = strings.TrimSpace(expr)
-	for _, col := range []string{"total_download", "total_upload", "id", "created_at", "ip", "wifiname", "hostname", "download_size", "upload_size"} {
+	for _, col := range []string{"total_download", "total_upload", "id", "created_at", "ip", "WifiName", "hostname", "download_size", "upload_size"} {
 		prefix := col + " "
 		if len(expr) > len(prefix) && strings.EqualFold(expr[:len(prefix)], prefix) {
 			rest := strings.TrimSpace(expr[len(prefix):])
@@ -396,8 +396,8 @@ func normalizeSortBy(value string) string {
 		return "total_upload"
 	case "hostname":
 		return "hostname"
-	case "wifiname":
-		return "wifiname"
+	case "WifiName":
+		return "WifiName"
 	default:
 		return ""
 	}
@@ -435,7 +435,7 @@ func scanConnections(rows *sql.Rows) ([]Connection, error) {
 		if err := rows.Scan(
 			&c.ID,
 			&c.IP,
-			&c.WiFiName,
+			&c.WifiName,
 			&c.HostName,
 			&c.DownloadSize,
 			&c.UploadSize,
@@ -468,7 +468,7 @@ func (s *Server) handleSessionStreamSocket(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	host := normalizeHostName(q.Get("host_name"))
-	wifi := normalizeWiFiName(q.Get("wifi_name"))
+	wifi := normalizeWifiName(q.Get("wifi_name"))
 
 	ws, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -520,14 +520,14 @@ func (s *Server) handleSessionStreamSocket(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (s *Server) listConnectionsBySession(hostname, wifiname string, limit int) ([]Connection, error) {
+func (s *Server) listConnectionsBySession(hostname, WifiName string, limit int) ([]Connection, error) {
 	rows, err := s.db.Query(`
-SELECT id, ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at
+SELECT id, ip, WifiName, hostname, download_size, upload_size, total_download, total_upload, created_at
 FROM connections
-WHERE hostname = $1 AND wifiname = $2
+WHERE hostname = $1 AND WifiName = $2
 ORDER BY id ASC
 LIMIT $3
-`, hostname, wifiname, limit)
+`, hostname, WifiName, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -535,14 +535,14 @@ LIMIT $3
 	return scanConnections(rows)
 }
 
-func (s *Server) listConnectionsBySessionAfterID(hostname, wifiname string, afterID int64, limit int) ([]Connection, error) {
+func (s *Server) listConnectionsBySessionAfterID(hostname, WifiName string, afterID int64, limit int) ([]Connection, error) {
 	rows, err := s.db.Query(`
-SELECT id, ip, wifiname, hostname, download_size, upload_size, total_download, total_upload, created_at
+SELECT id, ip, WifiName, hostname, download_size, upload_size, total_download, total_upload, created_at
 FROM connections
-WHERE hostname = $1 AND wifiname = $2 AND id > $3
+WHERE hostname = $1 AND WifiName = $2 AND id > $3
 ORDER BY id ASC
 LIMIT $4
-`, hostname, wifiname, afterID, limit)
+`, hostname, WifiName, afterID, limit)
 	if err != nil {
 		return nil, err
 	}

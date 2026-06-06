@@ -84,7 +84,7 @@ type ConnectionTrafficModalProps = {
   onOpenChange: (open: boolean) => void
   /** Values must match server-normalized session (same as list API). */
   hostName: string | null
-  wifiName: string | null
+  WifiName: string | null
   baseUrl: string
 }
 
@@ -92,7 +92,7 @@ export function ConnectionTrafficModal({
   open,
   onOpenChange,
   hostName,
-  wifiName,
+  WifiName,
   baseUrl,
 }: ConnectionTrafficModalProps) {
   const [points, setPoints] = useState<ChartPoint[]>([])
@@ -110,15 +110,15 @@ export function ConnectionTrafficModal({
   useEffect(() => {
     if (!open) return
     reset()
-  }, [open, hostName, wifiName, reset])
+  }, [open, hostName, WifiName, reset])
 
   useEffect(() => {
-    if (!open || hostName === null || wifiName === null || !baseUrl.trim()) return
+    if (!open || hostName === null || WifiName === null || !baseUrl.trim()) return
 
     const wsBase = httpToWebSocketBase(baseUrl.replace(/\/$/, ''))
     const qs = new URLSearchParams({
       host_name: hostName,
-      wifi_name: wifiName,
+      wifi_name: WifiName,
     })
     const path = `${wsBase}/api/v1/connections/stream?${qs.toString()}`
     const ws = new WebSocket(path)
@@ -173,10 +173,10 @@ export function ConnectionTrafficModal({
     return () => {
       ws.close()
     }
-  }, [open, hostName, wifiName, baseUrl])
+  }, [open, hostName, WifiName, baseUrl])
 
   const titleSuffix =
-    hostName !== null && wifiName !== null ? `${hostName} · ${wifiName}` : ''
+    hostName !== null && WifiName !== null ? `${hostName} · ${WifiName}` : ''
 
   const data: ChartData<'line', number[], string> = {
     labels: points.map((p) => p.t),

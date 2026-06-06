@@ -9,8 +9,8 @@ import (
 )
 
 func GetParametrizedQueryInstance(query *gorm.DB, params types.GetConnectionsQueryParamsDTO) (*gorm.DB, error) {
-	if params.WiFiName != "" {
-		query = query.Where("wifi_name = ?", params.WiFiName)
+	if params.WifiName != "" {
+		query = query.Where("wifi_name = ?", params.WifiName)
 	}
 	if params.HostName != "" {
 		query = query.Where("host_name = ?", params.HostName)
@@ -57,7 +57,7 @@ func ConnectionToConnectionResponseDTO(c *models.Connection) types.ConnectionRes
 	return types.ConnectionResponseDTO{
 		ID:            c.ID,
 		IP:            c.IP,
-		WiFiName:      c.WiFiName,
+		WifiName:      c.WifiName,
 		HostName:      c.HostName,
 		DownloadSize:  c.DownloadSize,
 		UploadSize:    c.UploadSize,

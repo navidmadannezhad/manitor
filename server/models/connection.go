@@ -5,7 +5,7 @@ import "time"
 type Connection struct {
 	BaseModel
 	IP            string    `gorm:"ip"`
-	WiFiName      string    `gorm:"wifi_name"`
+	WifiName      string    `gorm:"wifi_name"`
 	HostName      string    `gorm:"host_name"`
 	DownloadSize  uint64    `gorm:"download_size"`
 	UploadSize    uint64    `gorm:"upload_size"`

@@ -10,7 +10,7 @@ type Connection = {
   ip?: string
   host_name?: string
   hostName?: string
-  wifiName?: string
+  WifiName?: string
   wifi_name?: string
   upload_size?: number | string
   download_size?: number | string
@@ -115,7 +115,7 @@ export function ConnectionsPage() {
 
     return rows.map((row, index) => {
       const host = String(row.host_name ?? row.hostName ?? '').trim()
-      const wifi = String(row.wifi_name ?? row.wifiName ?? '').trim()
+      const wifi = String(row.wifi_name ?? row.WifiName ?? '').trim()
       return (
       <tr
         key={String(row.id ?? `${host}-${wifi}-${index}`)}
@@ -159,7 +159,7 @@ export function ConnectionsPage() {
             if (!open) setChartSession(null)
           }}
           hostName={chartSession?.host ?? null}
-          wifiName={chartSession?.wifi ?? null}
+          WifiName={chartSession?.wifi ?? null}
           baseUrl={serverBaseUrl}
         />
       )}
