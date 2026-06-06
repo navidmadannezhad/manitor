@@ -131,6 +131,7 @@ export function ConnectionTrafficModal({
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data as string) as WsMessage
+        console.log(msg)
         if (msg.type === 'error') {
           setError(msg.message || 'WebSocket error')
           setAwaitingFirst(false)

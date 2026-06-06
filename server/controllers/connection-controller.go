@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	"fmt"
+	"log"
+	"manitor-server/config"
 	"manitor-server/models"
 	"manitor-server/repository"
 	"manitor-server/types"
@@ -77,12 +80,6 @@ func CreateConnection(requestContext *gin.Context) {
 	)
 }
 
-func HandleSessionStreamSocket(context *gin.Context) {
-	context.JSON(http.StatusOK, gin.H{
-		"message": "pong",
-	})
-}
-
 func GetConnections(requestContext *gin.Context) {
 	var queryParams types.GetConnectionsQueryParamsDTO
 	err := requestContext.BindQuery(&queryParams)
@@ -105,6 +102,122 @@ func GetConnections(requestContext *gin.Context) {
 
 	requestContext.JSON(
 		http.StatusOK,
-		utils.ResolveResponse(connections),
+		utils.ResolveResponse(utils.ConnectionGroupToConnectionResponseDTOGroup(&connections)),
 	)
+}
+
+func HandleSessionStreamSocket(requestContext *gin.Context) {
+	wsUpgrader := config.GetWebsocketUpgrader()
+	var params types.GetConnectionsQueryParamsDTO
+
+	err := requestContext.BindQuery(&params)
+	if err != nil {
+		requestContext.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			utils.ResolveError(err),
+		)
+		return
+	}
+
+	params.PageSize = 10
+	connections, err := repository.GetConnections(requestContext, params)
+	if err != nil {
+		fmt.Println("ERROR HERE")
+		fmt.Println(utils.ResolveError(err))
+		requestContext.AbortWithStatusJSON(
+			http.StatusInternalServerError,
+			utils.ResolveError(err),
+		)
+		return
+	}
+
+	websocketHandler, err := wsUpgrader.Upgrade(
+		requestContext.Writer,
+		requestContext.Request,
+		nil,
+	)
+	if err != nil {
+		log.Printf("WebSocket upgrade failed: %v", err)
+		return
+	}
+	defer websocketHandler.Close()
+
+	params.AfterID = &[]uint{0}[0]
+	if len(connections) > 0 {
+		params.AfterID = &connections[len(connections)-1].ID
+	}
+
+	err = websocketHandler.WriteJSON(map[string]interface{}{
+		"type":      "history",
+		"host_name": params.HostName,
+		"wifi_name": params.WiFiName,
+		"data":      connections,
+	})
+	if err != nil {
+		log.Printf("Failed to send initial data: %v", err)
+		return
+	}
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		newRows, err := repository.GetConnections(requestContext, params)
+		if err != nil {
+			_ = websocketHandler.WriteJSON(map[string]any{
+				"type":    "error",
+				"message": "stream query failed",
+			})
+			return
+		}
+
+		if len(newRows) == 0 {
+			continue
+		}
+
+		params.AfterID = &newRows[len(newRows)-1].ID
+		if err := websocketHandler.WriteJSON(map[string]any{
+			"type":      "update",
+			"host_name": params.HostName,
+			"wifi_name": params.WiFiName,
+			"data":      newRows,
+		}); err != nil {
+			log.Printf("Failed to send update: %v", err)
+			return
+		}
+	}
+}
+
+func TestSocket(requestContext *gin.Context) {
+	upgrader := config.GetWebsocketUpgrader()
+	socketHandler, err := upgrader.Upgrade(requestContext.Writer, requestContext.Request, nil)
+	if err != nil {
+		fmt.Println("234")
+		requestContext.AbortWithStatusJSON(
+			http.StatusInternalServerError,
+			utils.ResolveError(err),
+		)
+		return
+	}
+
+	defer socketHandler.Close()
+
+	for {
+		fmt.Println("11")
+		mt, message, err := socketHandler.ReadMessage()
+		if err != nil {
+			fmt.Println("fds")
+			log.Println("read:", err)
+			break
+		}
+		log.Printf("recv: %s", message)
+		fmt.Println("It's being called")
+		test := []byte("گوز جن هستی")
+		err = socketHandler.WriteMessage(mt, test)
+		if err != nil {
+			fmt.Println("here?")
+			log.Println("write:", err)
+			break
+		}
+	}
 }

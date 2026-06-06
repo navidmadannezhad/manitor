@@ -15,6 +15,7 @@ func GetRouter() *gin.Engine {
 	apiRouter.GET("/connections", controllers.GetConnections)
 	apiRouter.POST("/connections", controllers.CreateConnection)
 	apiRouter.GET("/connections/stream", controllers.HandleSessionStreamSocket)
+	apiRouter.GET("/test-socket", controllers.TestSocket)
 
 	return router
 }

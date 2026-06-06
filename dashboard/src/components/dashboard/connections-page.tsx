@@ -3,6 +3,7 @@ import { IoEyeOutline } from 'react-icons/io5'
 
 import { ConnectionTrafficModal } from '@/components/dashboard/connection-traffic-modal'
 import { Button } from '@/components/ui/button'
+import axios from "axios";
 
 type Connection = {
   id?: string | number
@@ -57,16 +58,11 @@ export function ConnectionsPage() {
           throw new Error('VITE_SERVER_BASE_URL is not configured')
         }
 
-        const response = await fetch(
-          `${serverBaseUrl}/api/v1/connections`,
-          { signal: controller.signal }
+        const res = await axios.get(
+          `/api/v1/connections`,
         )
-
-        if (!response.ok) {
-          throw new Error(`Request failed (${response.status})`)
-        }
-
-        const payload = await response.json()
+        
+        const payload = res.data.result;
         const data = Array.isArray(payload)
           ? payload
           : Array.isArray(payload?.data)
