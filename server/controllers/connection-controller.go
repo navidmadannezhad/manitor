@@ -201,44 +201,10 @@ func HandleSessionStreamSocket(requestContext *gin.Context) {
 			"type":      "update",
 			"host_name": params.HostName,
 			"wifi_name": params.WifiName,
-			"data":      newRows,
+			"data":      utils.ConnectionGroupToConnectionResponseDTOGroup(&newRows),
 		}); err != nil {
 			log.Printf("Failed to send update: %v", err)
 			return
-		}
-	}
-}
-
-func TestSocket(requestContext *gin.Context) {
-	upgrader := config.GetWebsocketUpgrader()
-	socketHandler, err := upgrader.Upgrade(requestContext.Writer, requestContext.Request, nil)
-	if err != nil {
-		fmt.Println("234")
-		requestContext.AbortWithStatusJSON(
-			http.StatusInternalServerError,
-			utils.ResolveError(err),
-		)
-		return
-	}
-
-	defer socketHandler.Close()
-
-	for {
-		fmt.Println("11")
-		mt, message, err := socketHandler.ReadMessage()
-		if err != nil {
-			fmt.Println("fds")
-			log.Println("read:", err)
-			break
-		}
-		log.Printf("recv: %s", message)
-		fmt.Println("It's being called")
-		test := []byte("گوز جن هستی")
-		err = socketHandler.WriteMessage(mt, test)
-		if err != nil {
-			fmt.Println("here?")
-			log.Println("write:", err)
-			break
 		}
 	}
 }

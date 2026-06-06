@@ -131,7 +131,6 @@ export function ConnectionTrafficModal({
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data as string) as WsMessage
-        console.log(msg)
         if (msg.type === 'error') {
           setError(msg.message || 'WebSocket error')
           setAwaitingFirst(false)
@@ -145,6 +144,7 @@ export function ConnectionTrafficModal({
         }
         if (msg.type === 'update') {
           const list = Array.isArray(msg.data) ? msg.data : []
+          console.log(msg.data)
           if (list.length === 0) {
             // No new samples from agent; keep chart as-is (static).
             return
