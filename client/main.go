@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"manitor-client/utils"
 	"net"
 	"net/http"
 	"os/exec"
@@ -18,11 +19,8 @@ import (
 	gonet "github.com/shirou/gopsutil/v3/net"
 )
 
-//go:embed manitor-logo.ico
 var trayIcon []byte
-
-// serverClientURL: full Manitor ingest URL (POST /api/v1/connections). Edit and rebuild to change.
-var serverClientURL = "http://127.0.0.1:5000/api/v1/connections"
+var serverClientURL = utils.GetFromEnv("SERVER_URL")
 
 const (
 	collectInterval  = 1 * time.Second
