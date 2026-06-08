@@ -48,7 +48,7 @@ type TrafficLog struct {
 type AgentPayload struct {
 	SystemIP  string       `json:"system_ip"`
 	HostName  string       `json:"host_name"`
-	WiFiName  string       `json:"wifi_name"`
+	WifiName  string       `json:"wifi_name"`
 	Logs      []TrafficLog `json:"logs"`
 	Collected time.Time    `json:"collected_at"`
 }
@@ -65,7 +65,7 @@ var (
 	realtimePrevUp      uint64
 	realtimePrevDown    uint64
 	realtimeInitialized bool
-	lastWiFiName        string
+	lastWifiName        string
 	lastWiFiCheck       time.Time
 )
 
@@ -153,7 +153,7 @@ func (a *Agent) collectPayload() (AgentPayload, error) {
 	systemIP := primaryIPv4()
 	hostName := agentFriendlyName()
 	logs := make([]TrafficLog, 0, 2)
-	wifiName := currentWiFiName(now)
+	WifiName := currentWifiName(now)
 
 	ioCounters, err := gonet.IOCounters(true)
 	if err != nil {
@@ -186,7 +186,7 @@ func (a *Agent) collectPayload() (AgentPayload, error) {
 	return AgentPayload{
 		SystemIP:  systemIP,
 		HostName:  hostName,
-		WiFiName:  wifiName,
+		WifiName:  WifiName,
 		Logs:      logs,
 		Collected: now,
 	}, nil
@@ -374,22 +374,22 @@ func logRealtimeSnapshot() {
 	realtimePrevDown = totalDown
 	realtimeInitialized = true
 	now := time.Now()
-	wifiName := currentWiFiName(now)
+	WifiName := currentWifiName(now)
 
 	log.Printf(
 		"[realtime] time=%s display_name=%q host_ip=%s wifi_name=%q upload_1s=%dB download_1s=%dB",
 		now.Format(time.RFC3339),
 		agentFriendlyName(),
 		primaryIPv4(),
-		wifiName,
+		WifiName,
 		upDelta,
 		downDelta,
 	)
 }
 
-func currentWiFiName(now time.Time) string {
-	if now.Sub(lastWiFiCheck) < 10*time.Second && lastWiFiName != "" {
-		return lastWiFiName
+func currentWifiName(now time.Time) string {
+	if now.Sub(lastWiFiCheck) < 10*time.Second && lastWifiName != "" {
+		return lastWifiName
 	}
 
 	cmd := exec.Command("netsh", "wlan", "show", "interfaces")
@@ -397,15 +397,15 @@ func currentWiFiName(now time.Time) string {
 	out, err := cmd.Output()
 	lastWiFiCheck = now
 	if err != nil {
-		lastWiFiName = "unknown"
-		return lastWiFiName
+		lastWifiName = "unknown"
+		return lastWifiName
 	}
 
-	lastWiFiName = parseSSID(string(out))
-	if lastWiFiName == "" {
-		lastWiFiName = "unknown"
+	lastWifiName = parseSSID(string(out))
+	if lastWifiName == "" {
+		lastWifiName = "unknown"
 	}
-	return lastWiFiName
+	return lastWifiName
 }
 
 func parseSSID(raw string) string {

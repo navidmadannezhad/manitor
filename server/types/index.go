@@ -19,7 +19,7 @@ type TrafficLog struct {
 type AgentPayload struct {
 	SystemIP  string       `json:"system_ip" validate:"required"`
 	HostName  string       `json:"host_name,omitempty"`
-	WiFiName  string       `json:"wifi_name,omitempty"`
+	WifiName  string       `json:"wifi_name,omitempty"`
 	Collected time.Time    `json:"collected_at"`
 	Logs      []TrafficLog `json:"logs"`
 }

@@ -3,13 +3,14 @@ import { IoEyeOutline } from 'react-icons/io5'
 
 import { ConnectionTrafficModal } from '@/components/dashboard/connection-traffic-modal'
 import { Button } from '@/components/ui/button'
+import axios from "axios";
 
 type Connection = {
   id?: string | number
   ip?: string
   host_name?: string
   hostName?: string
-  wifiName?: string
+  WifiName?: string
   wifi_name?: string
   upload_size?: number | string
   download_size?: number | string
@@ -57,16 +58,11 @@ export function ConnectionsPage() {
           throw new Error('VITE_SERVER_BASE_URL is not configured')
         }
 
-        const response = await fetch(
-          `${serverBaseUrl}/api/v1/connections`,
-          { signal: controller.signal }
+        const res = await axios.get(
+          `/api/v1/connections`,
         )
-
-        if (!response.ok) {
-          throw new Error(`Request failed (${response.status})`)
-        }
-
-        const payload = await response.json()
+        
+        const payload = res.data.result;
         const data = Array.isArray(payload)
           ? payload
           : Array.isArray(payload?.data)
@@ -119,7 +115,7 @@ export function ConnectionsPage() {
 
     return rows.map((row, index) => {
       const host = String(row.host_name ?? row.hostName ?? '').trim()
-      const wifi = String(row.wifi_name ?? row.wifiName ?? '').trim()
+      const wifi = String(row.wifi_name ?? row.WifiName ?? '').trim()
       return (
       <tr
         key={String(row.id ?? `${host}-${wifi}-${index}`)}
@@ -163,7 +159,7 @@ export function ConnectionsPage() {
             if (!open) setChartSession(null)
           }}
           hostName={chartSession?.host ?? null}
-          wifiName={chartSession?.wifi ?? null}
+          WifiName={chartSession?.wifi ?? null}
           baseUrl={serverBaseUrl}
         />
       )}
